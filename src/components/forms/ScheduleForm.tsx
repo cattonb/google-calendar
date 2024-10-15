@@ -1,44 +1,29 @@
 "use client";
 
-import { EventFormType, eventFormSchema } from "@/schema/events";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "../ui/form";
-import { Input } from "../ui/input";
-import { Button } from "../ui/button";
-import Link from "next/link";
-import { Textarea } from "../ui/textarea";
-import { Switch } from "../ui/switch";
-import { createEvent, deleteEvent, updateEvent } from "@/server/actions/events";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "../ui/alert-dialog";
-import { useState, useTransition } from "react";
 import { DAYS_OF_WEEK_IN_ORDER } from "@/data/constants";
-import { ScheduleFormType, scheduleFormSchema } from "@/schema/schedule";
 import { formatTimezoneOffset, timeToInt } from "@/lib/formatters";
+import { ScheduleFormType, scheduleFormSchema } from "@/schema/schedule";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Plus } from "lucide-react";
+import { Fragment, useTransition } from "react";
+import { useFieldArray, useForm } from "react-hook-form";
+import { Button } from "../ui/button";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "../ui/form";
+import { Input } from "../ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 
 type Availability = {
   startTime: string;
   endTime: string;
   dayOfWeek: (typeof DAYS_OF_WEEK_IN_ORDER)[number];
+};
+
+interface AvailabilityWithIndex extends Availability {
+  index: number;
+}
+
+type GroupedAvailabilities = {
+  [key: string]: AvailabilityWithIndex[];
 };
 
 export function ScheduleForm({
@@ -49,6 +34,8 @@ export function ScheduleForm({
     availabilities: Availability[];
   };
 }) {
+  console.log(schedule);
+
   const [isDeletePending, startDeleteTransition] = useTransition();
   const form = useForm<ScheduleFormType>({
     resolver: zodResolver(scheduleFormSchema),
@@ -59,6 +46,28 @@ export function ScheduleForm({
       }),
     },
   });
+
+  const {
+    append: addAvailability,
+    remove: removeAvailability,
+    fields: availabilityFields,
+  } = useFieldArray({
+    name: "availabilities",
+    control: form.control,
+  });
+
+  const groupedAvailabilityFields: GroupedAvailabilities = availabilityFields
+    .map((field, index) => ({ ...field, index }))
+    .reduce((group: GroupedAvailabilities, availability: AvailabilityWithIndex) => {
+      const key = availability.dayOfWeek as keyof GroupedAvailabilities;
+
+      if (!group[key]) {
+        group[key] = [];
+      }
+
+      group[key].push(availability);
+      return group;
+    }, {} as GroupedAvailabilities);
 
   async function onSubmit(values: ScheduleFormType) {
     console.log(values);
@@ -102,6 +111,75 @@ export function ScheduleForm({
             </FormItem>
           )}
         />
+
+        <div className="grid grid-cols-[auto,1fr] gap-y-6 gap-x-4">
+          {DAYS_OF_WEEK_IN_ORDER.map((dayOfWeek) => (
+            <Fragment key={dayOfWeek}>
+              <div className="capitalize text-sm font-semibold">{dayOfWeek.substring(0, 3)}</div>
+              <div className="flex flex-col gap-2">
+                <Button
+                  type="button"
+                  className="size-6 p-1"
+                  variant="outline"
+                  onClick={() => {
+                    addAvailability({
+                      dayOfWeek,
+                      startTime: "9:00",
+                      endTime: "17:00",
+                    });
+                  }}>
+                  <Plus className="size-full" />
+                </Button>
+                {groupedAvailabilityFields[dayOfWeek]?.map((field, labelIndex) => (
+                  <div className="flex flex-col gap-1" key={field.index + "field"}>
+                    <div className="flex gap-2 items-center">
+                      <FormField
+                        control={form.control}
+                        name={`availabilities.${field.index}.startTime`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormControl>
+                              <Input
+                                className="w-24"
+                                aria-label={`${dayOfWeek} Start Time ${labelIndex + 1}`}
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name={`availabilities.${field.index}.endTime`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormControl>
+                              <Input
+                                className="w-24"
+                                aria-label={`${dayOfWeek} End Time ${labelIndex + 1}`}
+                                {...field}
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                    <FormMessage>
+                      {form.formState.errors.availabilities?.at?.(field.index)?.root?.message}
+                    </FormMessage>
+                    <FormMessage>
+                      {form.formState.errors.availabilities?.at?.(field.index)?.startTime?.message}
+                    </FormMessage>
+                    <FormMessage>
+                      {form.formState.errors.availabilities?.at?.(field.index)?.endTime?.message}
+                    </FormMessage>
+                  </div>
+                ))}
+              </div>
+            </Fragment>
+          ))}
+        </div>
 
         <div className="flex justify-end items-center gap-4">
           <Button disabled={form.formState.isSubmitting} type="submit">
