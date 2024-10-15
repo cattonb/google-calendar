@@ -4,13 +4,14 @@ import { DAYS_OF_WEEK_IN_ORDER } from "@/data/constants";
 import { formatTimezoneOffset, timeToInt } from "@/lib/formatters";
 import { ScheduleFormType, scheduleFormSchema } from "@/schema/schedule";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Plus } from "lucide-react";
-import { Fragment, useTransition } from "react";
+import { Plus, X } from "lucide-react";
+import { Fragment, useState, useTransition } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { Button } from "../ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "../ui/form";
 import { Input } from "../ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import { saveSchedule } from "@/server/actions/schedule";
 
 type Availability = {
   startTime: string;
@@ -20,6 +21,7 @@ type Availability = {
 
 interface AvailabilityWithIndex extends Availability {
   index: number;
+  id: string;
 }
 
 type GroupedAvailabilities = {
@@ -34,9 +36,7 @@ export function ScheduleForm({
     availabilities: Availability[];
   };
 }) {
-  console.log(schedule);
-
-  const [isDeletePending, startDeleteTransition] = useTransition();
+  const [successMsg, setSuccessMsg] = useState("");
   const form = useForm<ScheduleFormType>({
     resolver: zodResolver(scheduleFormSchema),
     defaultValues: {
@@ -56,10 +56,10 @@ export function ScheduleForm({
     control: form.control,
   });
 
-  const groupedAvailabilityFields: GroupedAvailabilities = availabilityFields
+  const groupedAvailabilityFields = availabilityFields
     .map((field, index) => ({ ...field, index }))
     .reduce((group: GroupedAvailabilities, availability: AvailabilityWithIndex) => {
-      const key = availability.dayOfWeek as keyof GroupedAvailabilities;
+      const key = availability.dayOfWeek;
 
       if (!group[key]) {
         group[key] = [];
@@ -67,17 +67,18 @@ export function ScheduleForm({
 
       group[key].push(availability);
       return group;
-    }, {} as GroupedAvailabilities);
+    }, {});
 
   async function onSubmit(values: ScheduleFormType) {
-    console.log(values);
-    // const action = event == null ? createEvent : updateEvent.bind(null, event.id);
-    // const data = await action(values);
-    // if (data?.error) {
-    //   form.setError("root", {
-    //     message: "There was an error saving your event.",
-    //   });
-    // }
+    const data = await saveSchedule(values);
+
+    if (data?.error) {
+      form.setError("root", {
+        message: "There was an error saving your event.",
+      });
+    } else {
+      setSuccessMsg("Schedule Saved");
+    }
   }
 
   return (
@@ -86,6 +87,7 @@ export function ScheduleForm({
         {form.formState.errors.root && (
           <div className="text-destructive text-sm">{form.formState.errors.root.message}</div>
         )}
+        {successMsg && <div className="text-sm text-green-600">Schedule Saved</div>}
         <FormField
           control={form.control}
           name="timezone"
@@ -131,7 +133,7 @@ export function ScheduleForm({
                   <Plus className="size-full" />
                 </Button>
                 {groupedAvailabilityFields[dayOfWeek]?.map((field, labelIndex) => (
-                  <div className="flex flex-col gap-1" key={field.index + "field"}>
+                  <div className="flex flex-col gap-1" key={field.id}>
                     <div className="flex gap-2 items-center">
                       <FormField
                         control={form.control}
@@ -149,6 +151,7 @@ export function ScheduleForm({
                           </FormItem>
                         )}
                       />
+                      -
                       <FormField
                         control={form.control}
                         name={`availabilities.${field.index}.endTime`}
@@ -164,6 +167,13 @@ export function ScheduleForm({
                           </FormItem>
                         )}
                       />
+                      <Button
+                        type="button"
+                        className="size-6 p-1"
+                        variant="destructive"
+                        onClick={() => removeAvailability(field.index)}>
+                        <X />
+                      </Button>
                     </div>
                     <FormMessage>
                       {form.formState.errors.availabilities?.at?.(field.index)?.root?.message}
