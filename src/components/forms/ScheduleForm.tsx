@@ -19,12 +19,12 @@ type Availability = {
   dayOfWeek: (typeof DAYS_OF_WEEK_IN_ORDER)[number];
 };
 
-interface AvailabilityWithIndex extends Availability {
+export interface AvailabilityWithIndex extends Availability {
   index: number;
   id: string;
 }
 
-type GroupedAvailabilities = {
+export type GroupedAvailabilities = {
   [key: string]: AvailabilityWithIndex[];
 };
 
